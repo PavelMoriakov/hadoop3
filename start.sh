@@ -35,6 +35,8 @@ echo """
   FLUSH PRIVILEGES;
   CREATE DATABASE hive;
 """ | mysql --user=root --password=$MYSQL_PWD
+# load data to MySql
+mysql < usr/local/data/classicmodels.sql -uroot -p$MYSQL_PWD
 
 # start hive
 $HIVE_HOME/bin/schematool -initSchema -dbType mysql

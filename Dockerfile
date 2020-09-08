@@ -52,16 +52,32 @@ RUN cat /dev/zero | ssh-keygen -q -N "" > /dev/null && cat /root/.ssh/id_rsa.pub
 
 ################################################################################
 # install java
-RUN echo oracle-java8-installer shared/accepted-oracle-license-v1-1 select true | debconf-set-selections && \
-  add-apt-repository -y ppa:webupd8team/java && \
-  apt-get update && \
-  apt-get install -y oracle-java8-installer && \
-  rm -rf /var/lib/apt/lists/* && \
-  rm -rf /var/cache/oracle-jdk8-installer
+#RUN echo oracle-java8-installer shared/accepted-oracle-license-v1-1 select true | debconf-set-selections && \
+#  add-apt-repository -y ppa:webupd8team/java && \
+#  apt-get update && \
+#  apt-get install -y oracle-java8-installer && \
+#  rm -rf /var/lib/apt/lists/* && \
+#  rm -rf /var/cache/oracle-jdk8-installer
+#
+RUN apt-get update && \
+	apt-get install -y openjdk-8-jdk && \
+	apt-get install -y ant && \
+	apt-get clean && \
+	rm -rf /var/lib/apt/lists/* && \
+	rm -rf /var/cache/oracle-jdk8-installer;
+
+# Fix certificate issues, found as of
+# https://bugs.launchpad.net/ubuntu/+source/ca-certificates-java/+bug/983302
+RUN apt-get update && \
+	apt-get install -y ca-certificates-java && \
+	apt-get clean && \
+	update-ca-certificates -f && \
+	rm -rf /var/lib/apt/lists/* && \
+	rm -rf /var/cache/oracle-jdk8-installer;
 
 ################################################################################
 # set environment variables
-ENV JAVA_HOME=/usr/lib/jvm/java-8-oracle
+ENV JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64/
 ENV HADOOP_HEAPSIZE=8192
 ENV HADOOP_HOME=/usr/local/hadoop
 ENV HADOOP_INSTALL=$HADOOP_HOME
@@ -73,6 +89,7 @@ ENV YARN_HOME=$HADOOP_INSTALL
 ENV HIVE_HOME=/usr/local/hive
 ENV SPARK_HOME=/usr/local/spark
 ENV HUE_HOME=/usr/local/hue
+ENV SQOOP_HOME=/usr/local/sqoop
 
 ENV PATH=$JAVA_HOME/bin:$HADOOP_HOME/bin:$HADOOP_INSTALL/sbin:$HIVE_HOME/bin:$SPARK_HOME/bin:$PATH
 ENV CLASSPATH=$HADOOP_HOME/lib/*:HIVE_HOME/lib/*:.
@@ -106,6 +123,7 @@ RUN echo "HDFS_DATANODE_USER=root" >> /etc/environment
 RUN echo "HDFS_SECONDARYNAMENODE_USER=root" >> /etc/environment
 RUN echo "YARN_RESOURCEMANAGER_USER=root" >> /etc/environment
 RUN echo "YARN_NODEMANAGER_USER=root" >> /etc/environment
+RUN echo "SQOOP_HOME=$SQOOP_HOME" >> /etc/environment
 
 ################################################################################
 # install hadoop
@@ -124,6 +142,7 @@ ADD hadoop-env.sh $HADOOP_CONF_DIR/hadoop-env.sh
 ADD hdfs-site.xml $HADOOP_CONF_DIR/hdfs-site.xml
 ADD mapred-site.xml $HADOOP_CONF_DIR/mapred-site.xml
 ADD yarn-site.xml $HADOOP_CONF_DIR/yarn-site.xml
+ADD data usr/local/data
 
 # format HFS
 RUN $HADOOP_HOME/bin/hdfs namenode -format -nonInteractive
@@ -136,7 +155,7 @@ ADD hive-site.xml $HIVE_HOME/conf/hive-site.xml
 
 ################################################################################
 # install spark
-RUN curl -s http://apache.claz.org/spark/spark-2.4.3/spark-2.4.3-bin-hadoop2.7.tgz | tar -xz -C /usr/local
+RUN curl -s https://archive.apache.org/dist/spark/spark-2.4.3/spark-2.4.3-bin-hadoop2.7.tgz | tar -xz -C /usr/local
 RUN mv /usr/local/spark-2.4.3-bin-hadoop2.7 $SPARK_HOME
 
 # config spark to read hive tables
@@ -182,6 +201,15 @@ RUN chown hdpu:hadoop /home/hdpu/.bashrc /home/hdpu/.profile
 
 RUN chgrp hadoop $HADOOP_HOME/logs/fairscheduler-statedump.log
 RUN chmod 664 $HADOOP_HOME/logs/fairscheduler-statedump.log
+
+################################################################################
+# install sqoop
+RUN mkdir /usr/local/sqoop
+RUN curl -s http://apache.spd.co.il/sqoop/1.4.7/sqoop-1.4.7.bin__hadoop-2.6.0.tar.gz | tar -xz -C /usr/local
+RUN mv /usr/local/sqoop-1.4.7.bin__hadoop-2.6.0/* $SQOOP_HOME
+RUN rm -r /usr/local/sqoop-1.4.7.bin__hadoop-2.6.0
+
+ENV PATH $PATH:$HADOOP_HOME/bin:$SQOOP_HOME/bin
 
 ################################################################################
 # expose port
